@@ -100,17 +100,24 @@ class Notabase {
             { "pageId": getFullBlockId(pageId), "limit": 50, "cursor": { "stack": [] }, "chunkNumber": 0, "verticalColumns": false }
         )
     }
-    async getPageCollectionInfo(pageId) {
-        console.log(`>>>> getPageChunk:${pageId}`)
+    async getPageCollectionInfo(pageId, cId) {
+        console.log(`>>>> getPageChunk:${pageId} ${cId}`)
         let data = await this.reqeust.post(`/api/v3/loadPageChunk`,
             { "pageId": getFullBlockId(pageId), "limit": 50, "cursor": { "stack": [] }, "chunkNumber": 0, "verticalColumns": false }
         )
         let collectionId = Object.entries(data.recordMap.collection)[0][0]
-        let collectionViewId = Object.entries(data.recordMap.collection_view)[0][0]
-        return [collectionId, collectionViewId]
+        let collectionViewId = Object.entries(data.recordMap.collection_view)[0][0];
+        const key = Object.keys(data.recordMap.collection_view).find((key) => {
+            return key.replace(/-/g, '') === cId;
+        })
+        if (key) {
+            collectionViewId = key;
+        }
+        const collection = data.recordMap.collection_view[collectionViewId];
+        return [collectionId, collectionViewId, collection.value.query2]
     }
 
-    async queryCollection(collectionId, collectionViewId, limit = 980) {
+    async queryCollection(collectionId, collectionViewId, limit = 980, query2) {
         return await this.reqeust.post(`/api/v3/queryCollection`, {
             collectionId,
             collectionViewId,
@@ -120,13 +127,14 @@ class Notabase {
                 "userTimeZone": "Asia/Shanghai",
                 "userLocale": "zh-tw",
                 "loadContentCover": true
-            }
+            },
+            query: query2
         })
     }
 
-    async fetchCollectionData(collectionId, collectionViewId, limit = 980) {
-        let data = await this.queryCollection(collectionId, collectionViewId, limit);
-        console.log(`>>>> queryCollection:${collectionId}`)
+    async fetchCollectionData(collectionId, collectionViewId, limit = 980, query2) {
+        let data = await this.queryCollection(collectionId, collectionViewId, limit, query2);
+        console.log(`>>>> queryCollection:${collectionId} ${collectionViewId}`)
         // prefetch relation  data 
         /**
          * when limit > 1000, notion wont return recordMap. 
@@ -138,20 +146,22 @@ class Notabase {
         this.collectionSchemaStore[collectionId] = schema
         return await new Collection(collectionId, collectionViewId, data, this)
     }
-    async fetch(urlOrPageId) {
-        let collectionId, collectionViewId, pageId
+    async fetch(urlOrPageId, collectionViewId) {
+        let collectionId, pageId, query2;
         if (urlOrPageId.match("^[a-zA-Z0-9-]+$")) {
             // pageId with '-' split
             // pageId = getBlockHashId(urlOrPageId)
-            [collectionId, collectionViewId] = await this.getPageCollectionInfo(getBlockHashId(urlOrPageId))
+            [collectionId, collectionViewId] = await this.getPageCollectionInfo(getBlockHashId(urlOrPageId), collectionViewId)
         } else if (urlOrPageId.startsWith("http")) {
             // url 
             // pageId = getUrlPageId(urlOrPageId)
             let [base, params] = urlOrPageId.split('?')
             let baseUrlList = base.split('/'); // 这里需要添加分号，否则编译出错。 参见 https://www.zhihu.com/question/20298345/answer/49551142
-            [collectionId, collectionViewId] = await this.getPageCollectionInfo(baseUrlList[baseUrlList.length - 1])
+            // extra collectionViewId
+            const query = utils.parseQueryString(params);
+            [collectionId, collectionViewId, query2] = await this.getPageCollectionInfo(baseUrlList[baseUrlList.length - 1], query.v)
         }
-        let r = await this.fetchCollectionData(collectionId, collectionViewId)
+        let r = await this.fetchCollectionData(collectionId, collectionViewId, undefined, query2);
         // this.collectionStore[pageId] = r
         return r
     }

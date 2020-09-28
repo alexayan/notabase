@@ -69,4 +69,14 @@ const unFixTimeZone = (date, timeZone) => {
     return new Date(adjustedTime);
 }
 
-module.exports = { isPageId, getBlockHashId, getFullBlockId, getBrowseableUrl, getUrlPageId, parseImageUrl, formatDate, formatTime, fixTimeZone, unFixTimeZone }
+const parseQueryString = (qs) => {
+    const rtn = {};
+    const parts = (qs || '').split('&');
+    parts.forEach((part) => {
+        const items = part.split('=');
+        rtn[items[0]] = decodeURIComponent(items[1]);
+    });
+    return rtn;
+}
+
+module.exports = { isPageId, getBlockHashId, getFullBlockId, getBrowseableUrl, getUrlPageId, parseImageUrl, formatDate, formatTime, fixTimeZone, unFixTimeZone, parseQueryString }
